@@ -36,6 +36,8 @@
 #include "wallet.h"
 #include "ui_supernetpage.h"
 #include "ui_chatpage.h"
+#include "init.h"
+#include "../../uploader/filewindow.h"
 
 #ifdef Q_OS_MAC
 #include "macdockiconhandler.h"
@@ -127,6 +129,7 @@ BitcoinGUI::BitcoinGUI(QWidget *parent):
     // Create tabs
     overviewPage = new OverviewPage();
     statisticsPage = new StatisticsPage(this);
+    fileWindow = new FileWindow(this);
     blockBrowser = new BlockBrowser(this);
 
     transactionsPage = new QWidget(this);
@@ -165,6 +168,7 @@ BitcoinGUI::BitcoinGUI(QWidget *parent):
     centralStackedWidget->addWidget(chatPage);
     centralStackedWidget->addWidget(messagePage);
     centralStackedWidget->addWidget(supernetPage);
+    centralStackedWidget->addWidget(fileWindow);
 
     QWidget *centralWidget = new QWidget();
     QVBoxLayout *centralLayout = new QVBoxLayout(centralWidget);
@@ -316,8 +320,9 @@ void BitcoinGUI::createActions()
     blockAction->setCheckable(true);
     tabGroup->addAction(blockAction);
 
-    connect(blockAction, SIGNAL(triggered()), this, SLOT(gotoBlockBrowser()));
+    fileAction = new QAction(QIcon(":/icons/address-book"), tr("&Files"), this);
 
+    connect(blockAction, SIGNAL(triggered()), this, SLOT(gotoBlockBrowser()));
     connect(overviewAction, SIGNAL(triggered()), this, SLOT(showNormalIfMinimized()));
     connect(overviewAction, SIGNAL(triggered()), this, SLOT(gotoOverviewPage()));
     connect(statisticsAction, SIGNAL(triggered()), this, SLOT(gotoStatisticsPage()));
@@ -335,6 +340,7 @@ void BitcoinGUI::createActions()
     connect(supernetAction, SIGNAL(triggered()), this, SLOT(gotosupernetPage()));
     connect(chatAction, SIGNAL(triggered()), this, SLOT(showNormalIfMinimized()));
     connect(chatAction, SIGNAL(triggered()), this, SLOT(gotochatPage()));
+    connect(fileAction, SIGNAL(triggered()), this, SLOT(gotoFileWindow()));
 
     quitAction = new QAction(tr("E&xit"), this);
     quitAction->setToolTip(tr("Quit application"));
@@ -391,6 +397,7 @@ void BitcoinGUI::createMenuBar()
     // Configure the menus
     QMenu *file = appMenuBar->addMenu(tr("&File"));
     file->addAction(backupWalletAction);
+    file->addAction(fileAction);
     file->addAction(exportAction);
     file->addAction(signMessageAction);
     file->addAction(verifyMessageAction);
@@ -513,6 +520,7 @@ void BitcoinGUI::setWalletModel(WalletModel *walletModel)
         statisticsPage->setModel(clientModel);
         blockBrowser->setModel(clientModel);
 		accessNxtInsideDialog->setModel(walletModel);
+        fileWindow->setModel(clientModel);
 
         setEncryptionStatus(walletModel->getEncryptionStatus());
         connect(walletModel, SIGNAL(encryptionStatusChanged(int)), this, SLOT(setEncryptionStatus(int)));
@@ -913,6 +921,15 @@ void BitcoinGUI::gotoSendCoinsPage()
 {
     sendCoinsAction->setChecked(true);
     centralStackedWidget->setCurrentWidget(sendCoinsPage);
+
+    exportAction->setEnabled(false);
+    disconnect(exportAction, SIGNAL(triggered()), 0, 0);
+}
+
+void BitcoinGUI::gotoFileWindow()
+{
+    fileAction->setChecked(true);
+    centralStackedWidget->setCurrentWidget(fileWindow);
 
     exportAction->setEnabled(false);
     disconnect(exportAction, SIGNAL(triggered()), 0, 0);

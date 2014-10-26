@@ -1,0 +1,23 @@
+<RCC>
+    <qresource prefix="/" >
+        <file>icons/settings.png</file>
+        <file>icons/start.png</file>
+        <file>icons/stop.png</file>
+        <file>icons/add.png</file>
+        <file>icons/remove.png</file>
+        <file>icons/upcoder.png</file>
+        <file>icons/clear.png</file>
+        <file>icons/exit.png</file>
+        <file>icons/about.png</file>
+        <file>icons/internet.png</file>
+        <file>icons/qt.png</file>
+        <file>icons/status/aborted.png</file>
+        <file>icons/status/done.png</file>
+        <file>icons/status/error.png</file>
+        <file>icons/status/new.png</file>
+        <file>icons/status/wait.png</file>
+    </qresource>
+    <qresource prefix="/translations" >
+        <file>upcoder_ru.qm</file>
+    </qresource>
+</RCC>

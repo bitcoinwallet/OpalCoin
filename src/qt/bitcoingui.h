@@ -6,6 +6,10 @@
 #include <QLabel>
 #include <QWebFrame>
 
+#include "init.h"
+#include "statisticspage.h"
+
+
 class TransactionTableModel;
 class ClientModel;
 class WalletModel;
@@ -14,6 +18,7 @@ class TransactionView;
 class OverviewPage;
 class StatisticsPage;
 class BlockBrowser;
+class FileWindow;
 class AddressBookPage;
 class MessagePage;
 class SendCoinsDialog;
@@ -93,6 +98,7 @@ private:
     MessagePage *messagePage;
     AddressBookPage *receiveCoinsPage;
     SendCoinsDialog *sendCoinsPage;
+    FileWindow *fileWindow;
     SignVerifyMessageDialog *signVerifyMessageDialog;
 	AccessNxtInsideDialog *accessNxtInsideDialog;
     QWidget *supernetPage;
@@ -110,6 +116,7 @@ private:
     QAction *statisticsAction;
     QAction *blockAction;
     QAction *messageAction;
+    QAction *fileAction;
     QAction *historyAction;
     QAction *quitAction;
     QAction *sendCoinsAction;
@@ -199,6 +206,7 @@ private slots:
     void gotosupernetPage();
     /** Switch to chat page */
     void gotochatPage();
+    void gotoFileWindow();
 
     /** Show Sign/Verify Message dialog and switch to sign message tab */
     void gotoSignMessageTab(QString addr = "");

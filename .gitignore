@@ -37,7 +37,11 @@ Icon
 .Spotlight-V100
 .Trashes
 
-
+upcoder/qrc*
+upcoder/*.o
+upcoder/moc*
+upcoder/Makefile
+upcoder/ui_*
 src/*.exe
 src/opalcoin
 src/opalcoind
