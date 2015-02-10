@@ -313,7 +313,6 @@ void BitcoinGUI::createActions()
     chatAction->setCheckable(true);
     chatAction->setShortcut(QKeySequence(Qt::ALT + Qt::Key_6));
     tabGroup->addAction(chatAction);
->>>>>>> master
 
     messageAction = new QAction(QIcon(":/icons/opacity"),tr("Opacity"), this);
     messageAction->setToolTip(tr("View and Send Encrypted messages"));
