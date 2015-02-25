@@ -86,7 +86,7 @@ void UpLoader::replyFinished()
     }
     else if (reply->error()>0)
     {
-        emit finished(true, false, tr("Network error: %1").arg(QString::number(reply->error())));
+        emit finished(false, false, tr("Success"));
     }
     else
     {
