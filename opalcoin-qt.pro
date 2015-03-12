@@ -238,6 +238,7 @@ HEADERS += src/qt/bitcoingui.h \
     src/coincontrol.h \
     src/sync.h \
     src/util.h \
+    src/hash.h \
     src/uint256.h \
     src/kernel.h \
     src/scrypt.h \
@@ -255,7 +256,6 @@ HEADERS += src/qt/bitcoingui.h \
     src/script.h \
     src/stealth.h \
     src/init.h \
-    src/irc.h \
     src/mruset.h \
     src/json/json_spirit_writer_template.h \
     src/json/json_spirit_writer.h \
@@ -272,6 +272,7 @@ HEADERS += src/qt/bitcoingui.h \
     src/qt/guiconstants.h \
     src/qt/optionsmodel.h \
     src/qt/monitoreddatamapper.h \
+    src/qt/trafficgraphwidget.h \
     src/qt/transactiondesc.h \
     src/qt/transactiondescdialog.h \
     src/qt/bitcoinamountfield.h \
@@ -358,7 +359,6 @@ SOURCES += src/qt/bitcoin.cpp src/qt/bitcoingui.cpp \
     src/miner.cpp \
     src/init.cpp \
     src/net.cpp \
-    src/irc.cpp \
     src/checkpoints.cpp \
     src/addrman.cpp \
     src/db.cpp \
@@ -368,6 +368,7 @@ SOURCES += src/qt/bitcoin.cpp src/qt/bitcoingui.cpp \
     src/qt/transactionrecord.cpp \
     src/qt/optionsmodel.cpp \
     src/qt/monitoreddatamapper.cpp \
+    src/qt/trafficgraphwidget.cpp \
     src/qt/transactiondesc.cpp \
     src/qt/transactiondescdialog.cpp \
     src/qt/bitcoinstrings.cpp \

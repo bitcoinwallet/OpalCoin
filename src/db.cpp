@@ -6,10 +6,12 @@
 #include "db.h"
 #include "net.h"
 #include "util.h"
-#include "main.h"
-#include "ui_interface.h"
+#include "hash.h"
+#include "addrman.h"
+#include <boost/version.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
+#include <openssl/rand.h>
 
 #ifndef WIN32
 #include "sys/stat.h"
@@ -63,8 +65,7 @@ bool CDBEnv::Open(boost::filesystem::path pathEnv_)
     if (fDbEnvInit)
         return true;
 
-    if (fShutdown)
-        return false;
+    boost::this_thread::interruption_point();
 
     pathEnv = pathEnv_;
     filesystem::path pathDataDir = pathEnv;
@@ -119,8 +120,7 @@ void CDBEnv::MakeMock()
     if (fDbEnvInit)
         throw runtime_error("CDBEnv::MakeMock(): already initialized");
 
-    if (fShutdown)
-        throw runtime_error("CDBEnv::MakeMock(): during shutdown");
+    boost::this_thread::interruption_point();
 
     printf("CDBEnv::MakeMock()\n");
 
@@ -293,14 +293,6 @@ CDB::CDB(const char *pszFile, const char* pszMode) :
     }
 }
 
-static bool IsChainFile(std::string strFile)
-{
-    if (strFile == "blkindex.dat")
-        return true;
-
-    return false;
-}
-
 void CDB::Close()
 {
     if (!pdb)
@@ -314,10 +306,6 @@ void CDB::Close()
     unsigned int nMinutes = 0;
     if (fReadOnly)
         nMinutes = 1;
-    if (IsChainFile(strFile))
-        nMinutes = 2;
-    if (IsChainFile(strFile) && IsInitialBlockDownload())
-        nMinutes = 5;
 
     bitdb.dbenv.txn_checkpoint(nMinutes ? GetArg("-dblogsize", 100)*1024 : 0, nMinutes, 0);
 
@@ -353,7 +341,7 @@ bool CDBEnv::RemoveDb(const string& strFile)
 
 bool CDB::Rewrite(const string& strFile, const char* pszSkip)
 {
-    while (!fShutdown)
+    while (true)
     {
         {
             LOCK(bitdb.cs_db);
@@ -467,11 +455,9 @@ void CDBEnv::Flush(bool fShutdown)
                 CloseDb(strFile);
                 printf("%s checkpoint\n", strFile.c_str());
                 dbenv.txn_checkpoint(0, 0, 0);
-                if (!IsChainFile(strFile) || fDetachDB) {
-                    printf("%s detach\n", strFile.c_str());
-                    if (!fMockDb)
-                        dbenv.lsn_reset(strFile.c_str(), 0);
-                }
+                printf("%s detach\n", strFile.c_str());
+                if (!fMockDb)
+                    dbenv.lsn_reset(strFile.c_str(), 0);
                 printf("%s closed\n", strFile.c_str());
                 mapFileUseCount.erase(mi++);
             }
@@ -496,6 +482,7 @@ void CDBEnv::Flush(bool fShutdown)
 // CAddrDB
 //
 
+unsigned char CAddrDB::pchMessageStart[4] = { 0x00, 0x00, 0x00, 0x00 };
 
 CAddrDB::CAddrDB()
 {
@@ -511,7 +498,7 @@ bool CAddrDB::Write(const CAddrMan& addr)
 
     // serialize addresses, checksum data up to that point, then append csum
     CDataStream ssPeers(SER_DISK, CLIENT_VERSION);
-    ssPeers << FLATDATA(pchMessageStart);
+    ssPeers << FLATDATA(CAddrDB::pchMessageStart);
     ssPeers << addr;
     uint256 hash = Hash(ssPeers.begin(), ssPeers.end());
     ssPeers << hash;
@@ -576,11 +563,11 @@ bool CAddrDB::Read(CAddrMan& addr)
 
     unsigned char pchMsgTmp[4];
     try {
-        // de-serialize file header (pchMessageStart magic number) and
+        // de-serialize file header (CAddrDB::pchMessageStart magic number) and
         ssPeers >> FLATDATA(pchMsgTmp);
 
         // verify the network matches ours
-        if (memcmp(pchMsgTmp, pchMessageStart, sizeof(pchMsgTmp)))
+        if (memcmp(pchMsgTmp, CAddrDB::pchMessageStart, sizeof(pchMsgTmp)))
             return error("CAddrman::Read() : invalid network magic number");
 
         // de-serialize address data into one CAddrMan object

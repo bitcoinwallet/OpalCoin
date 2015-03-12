@@ -6,6 +6,7 @@
 #include "netbase.h"
 #include "util.h"
 #include "sync.h"
+#include "hash.h"
 
 #ifndef WIN32
 #include <sys/fcntl.h>
@@ -133,11 +134,6 @@ bool LookupHost(const char *pszName, std::vector<CNetAddr>& vIP, unsigned int nM
     return LookupIntern(pszHost, vIP, nMaxSolutions, fAllowLookup);
 }
 
-bool LookupHostNumeric(const char *pszName, std::vector<CNetAddr>& vIP, unsigned int nMaxSolutions)
-{
-    return LookupHost(pszName, vIP, nMaxSolutions, false);
-}
-
 bool Lookup(const char *pszName, std::vector<CService>& vAddr, int portDefault, bool fAllowLookup, unsigned int nMaxSolutions)
 {
     if (pszName[0] == 0)
@@ -250,7 +246,7 @@ bool static Socks5(string strDest, int port, SOCKET& hSocket)
     strSocks5 += strDest;
     strSocks5 += static_cast<char>((port >> 8) & 0xFF);
     strSocks5 += static_cast<char>((port >> 0) & 0xFF);
-    ret = send(hSocket, strSocks5.c_str(), strSocks5.size(), MSG_NOSIGNAL);
+    ret = send(hSocket, strSocks5.data(), strSocks5.size(), MSG_NOSIGNAL);
     if (ret != (ssize_t)strSocks5.size())
     {
         closesocket(hSocket);
@@ -357,8 +353,9 @@ bool static ConnectSocketDirectly(const CService &addrConnect, SOCKET& hSocketRe
 
     if (connect(hSocket, (struct sockaddr*)&sockaddr, len) == SOCKET_ERROR)
     {
+        int nErr = WSAGetLastError();
         // WSAEINVAL is here because some legacy version of winsock uses it
-        if (WSAGetLastError() == WSAEINPROGRESS || WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAEINVAL)
+        if (nErr == WSAEINPROGRESS || nErr == WSAEWOULDBLOCK || nErr == WSAEINVAL)
         {
             struct timeval timeout;
             timeout.tv_sec  = nTimeout / 1000;
@@ -553,7 +550,7 @@ bool ConnectSocketByName(CService &addr, SOCKET& hSocketRet, const char *pszDest
 
 void CNetAddr::Init()
 {
-    memset(ip, 0, 16);
+    memset(ip, 0, sizeof(ip));
 }
 
 void CNetAddr::SetIP(const CNetAddr& ipIn)
