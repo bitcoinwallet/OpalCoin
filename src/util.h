@@ -15,6 +15,8 @@
 #endif
 
 #include <map>
+#include <list>
+#include <utility>
 #include <vector>
 #include <string>
 
@@ -23,9 +25,6 @@
 #include <boost/filesystem/path.hpp>
 #include <boost/date_time/gregorian/gregorian_types.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
-
-#include <openssl/sha.h>
-#include <openssl/ripemd.h>
 
 #include "netbase.h" // for AddTimeData
 
@@ -146,8 +145,6 @@ extern bool fDebugSmsg;
 extern bool fNoSmsg;
 extern bool fPrintToConsole;
 extern bool fPrintToDebugger;
-extern bool fRequestShutdown;
-extern bool fShutdown;
 extern bool fDaemon;
 extern bool fServer;
 extern bool fCommandLine;
@@ -187,7 +184,6 @@ bool ATTR_WARN_PRINTF(1,2) error(const char *format, ...);
  */
 #define printf OutputDebugStringF
 
-void LogException(std::exception* pex, const char* pszThread);
 void PrintException(std::exception* pex, const char* pszThread);
 void PrintExceptionContinue(std::exception* pex, const char* pszThread);
 void ParseString(const std::string& str, char c, std::vector<std::string>& v);
@@ -324,17 +320,6 @@ inline std::string HexStr(const std::vector<unsigned char>& vch, bool fSpaces=fa
     return HexStr(vch.begin(), vch.end(), fSpaces);
 }
 
-template<typename T>
-void PrintHex(const T pbegin, const T pend, const char* pszFormat="%s", bool fSpaces=true)
-{
-    printf(pszFormat, HexStr(pbegin, pend, fSpaces).c_str());
-}
-
-inline void PrintHex(const std::vector<unsigned char>& vch, const char* pszFormat="%s", bool fSpaces=true)
-{
-    printf(pszFormat, HexStr(vch, fSpaces).c_str());
-}
-
 inline int64_t GetPerformanceCounter()
 {
     int64_t nCounter = 0;
@@ -437,115 +422,27 @@ bool SoftSetArg(const std::string& strArg, const std::string& strValue);
  */
 bool SoftSetBoolArg(const std::string& strArg, bool fValue);
 
-
-
-
-
-
-
-
-
-template<typename T1>
-inline uint256 Hash(const T1 pbegin, const T1 pend)
+/**
+ * MWC RNG of George Marsaglia
+ * This is intended to be fast. It has a period of 2^59.3, though the
+ * least significant 16 bits only have a period of about 2^30.1.
+ *
+ * @return random value
+ */
+extern uint32_t insecure_rand_Rz;
+extern uint32_t insecure_rand_Rw;
+static inline uint32_t insecure_rand(void)
 {
-    static unsigned char pblank[1];
-    uint256 hash1;
-    SHA256((pbegin == pend ? pblank : (unsigned char*)&pbegin[0]), (pend - pbegin) * sizeof(pbegin[0]), (unsigned char*)&hash1);
-    uint256 hash2;
-    SHA256((unsigned char*)&hash1, sizeof(hash1), (unsigned char*)&hash2);
-    return hash2;
+  insecure_rand_Rz=36969*(insecure_rand_Rz&65535)+(insecure_rand_Rz>>16);
+  insecure_rand_Rw=18000*(insecure_rand_Rw&65535)+(insecure_rand_Rw>>16);
+  return (insecure_rand_Rw<<16)+insecure_rand_Rz;
 }
 
-class CHashWriter
-{
-private:
-    SHA256_CTX ctx;
-
-public:
-    int nType;
-    int nVersion;
-
-    void Init() {
-        SHA256_Init(&ctx);
-    }
-
-    CHashWriter(int nTypeIn, int nVersionIn) : nType(nTypeIn), nVersion(nVersionIn) {
-        Init();
-    }
-
-    CHashWriter& write(const char *pch, size_t size) {
-        SHA256_Update(&ctx, pch, size);
-        return (*this);
-    }
-
-    // invalidates the object
-    uint256 GetHash() {
-        uint256 hash1;
-        SHA256_Final((unsigned char*)&hash1, &ctx);
-        uint256 hash2;
-        SHA256((unsigned char*)&hash1, sizeof(hash1), (unsigned char*)&hash2);
-        return hash2;
-    }
-
-    template<typename T>
-    CHashWriter& operator<<(const T& obj) {
-        // Serialize to this stream
-        ::Serialize(*this, obj, nType, nVersion);
-        return (*this);
-    }
-};
-
-
-template<typename T1, typename T2>
-inline uint256 Hash(const T1 p1begin, const T1 p1end,
-                    const T2 p2begin, const T2 p2end)
-{
-    static unsigned char pblank[1];
-    uint256 hash1;
-    SHA256_CTX ctx;
-    SHA256_Init(&ctx);
-    SHA256_Update(&ctx, (p1begin == p1end ? pblank : (unsigned char*)&p1begin[0]), (p1end - p1begin) * sizeof(p1begin[0]));
-    SHA256_Update(&ctx, (p2begin == p2end ? pblank : (unsigned char*)&p2begin[0]), (p2end - p2begin) * sizeof(p2begin[0]));
-    SHA256_Final((unsigned char*)&hash1, &ctx);
-    uint256 hash2;
-    SHA256((unsigned char*)&hash1, sizeof(hash1), (unsigned char*)&hash2);
-    return hash2;
-}
-
-template<typename T1, typename T2, typename T3>
-inline uint256 Hash(const T1 p1begin, const T1 p1end,
-                    const T2 p2begin, const T2 p2end,
-                    const T3 p3begin, const T3 p3end)
-{
-    static unsigned char pblank[1];
-    uint256 hash1;
-    SHA256_CTX ctx;
-    SHA256_Init(&ctx);
-    SHA256_Update(&ctx, (p1begin == p1end ? pblank : (unsigned char*)&p1begin[0]), (p1end - p1begin) * sizeof(p1begin[0]));
-    SHA256_Update(&ctx, (p2begin == p2end ? pblank : (unsigned char*)&p2begin[0]), (p2end - p2begin) * sizeof(p2begin[0]));
-    SHA256_Update(&ctx, (p3begin == p3end ? pblank : (unsigned char*)&p3begin[0]), (p3end - p3begin) * sizeof(p3begin[0]));
-    SHA256_Final((unsigned char*)&hash1, &ctx);
-    uint256 hash2;
-    SHA256((unsigned char*)&hash1, sizeof(hash1), (unsigned char*)&hash2);
-    return hash2;
-}
-
-template<typename T>
-uint256 SerializeHash(const T& obj, int nType=SER_GETHASH, int nVersion=PROTOCOL_VERSION)
-{
-    CHashWriter ss(nType, nVersion);
-    ss << obj;
-    return ss.GetHash();
-}
-
-inline uint160 Hash160(const std::vector<unsigned char>& vch)
-{
-    uint256 hash1;
-    SHA256(&vch[0], vch.size(), (unsigned char*)&hash1);
-    uint160 hash2;
-    RIPEMD160((unsigned char*)&hash1, sizeof(hash1), (unsigned char*)&hash2);
-    return hash2;
-}
+/**
+ * Seed insecure_rand using the random pool.
+ * @param Deterministic Use a determinstic seed
+ */
+void seed_insecure_rand(bool fDeterministic=false);
 
 /**
  * Timing-attack-resistant comparison.
@@ -657,5 +554,60 @@ inline uint32_t ByteReverse(uint32_t value)
     return (value<<16) | (value>>16);
 }
 
-#endif
+// Standard wrapper for do-something-forever thread functions.
+// "Forever" really means until the thread is interrupted.
+// Use it like:
+//   new boost::thread(boost::bind(&LoopForever<void (*)()>, "dumpaddr", &DumpAddresses, 900000));
+// or maybe:
+//    boost::function<void()> f = boost::bind(&FunctionWithArg, argument);
+//    threadGroup.create_thread(boost::bind(&LoopForever<boost::function<void()> >, "nothing", f, milliseconds));
+template <typename Callable> void LoopForever(const char* name,  Callable func, int64_t msecs)
+{
+    std::string s = strprintf("opalcoin-%s", name);
+    RenameThread(s.c_str());
+    printf("%s thread start\n", name);
+    try
+    {
+        while (1)
+        {
+            MilliSleep(msecs);
+            func();
+        }
+    }
+    catch (boost::thread_interrupted)
+    {
+        printf("%s thread stop\n", name);
+        throw;
+    }
+    catch (std::exception& e) {
+        PrintException(&e, name);
+    }
+    catch (...) {
+        PrintException(NULL, name);
+    }
+}
+// .. and a wrapper that just calls func once
+template <typename Callable> void TraceThread(const char* name,  Callable func)
+{
+    std::string s = strprintf("opalcoin-%s", name);
+    RenameThread(s.c_str());
+    try
+    {
+        printf("%s thread start\n", name);
+        func();
+        printf("%s thread exit\n", name);
+    }
+    catch (boost::thread_interrupted)
+    {
+        printf("%s thread interrupt\n", name);
+        throw;
+    }
+    catch (std::exception& e) {
+        PrintException(&e, name);
+    }
+    catch (...) {
+        PrintException(NULL, name);
+    }
+}
 
+#endif

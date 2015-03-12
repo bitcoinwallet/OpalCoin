@@ -8,6 +8,7 @@
 #include <deque>
 #include <boost/array.hpp>
 #include <boost/foreach.hpp>
+#include <boost/signals2/signal.hpp>
 #include <openssl/rand.h>
 
 #ifndef WIN32
@@ -18,6 +19,7 @@
 #include "netbase.h"
 #include "protocol.h"
 #include "addrman.h"
+#include "hash.h"
 
 class CRequestTracker;
 class CNode;
@@ -40,12 +42,22 @@ void AddressCurrentlyConnected(const CService& addr);
 CNode* FindNode(const CNetAddr& ip);
 CNode* FindNode(const CService& ip);
 CNode* ConnectNode(CAddress addrConnect, const char *strDest = NULL);
-void MapPort();
+void MapPort(bool fUseUPnP);
 unsigned short GetListenPort();
 bool BindListenPort(const CService &bindAddr, std::string& strError=REF(std::string()));
-void StartNode(void* parg);
+void StartNode(boost::thread_group& threadGroup);
 bool StopNode();
 void SocketSendData(CNode *pnode);
+
+// Signals for message handling
+struct CNodeSignals
+{
+    boost::signals2::signal<bool (CNode*)> ProcessMessages;
+    boost::signals2::signal<bool (CNode*, bool)> SendMessages;
+};
+
+CNodeSignals& GetNodeSignals();
+
 
 enum
 {
@@ -53,7 +65,6 @@ enum
     LOCAL_IF,     // address a local interface listens on
     LOCAL_BIND,   // address explicit bound to
     LOCAL_UPNP,   // address reported by UPnP
-    LOCAL_IRC,    // address reported by IRC (deprecated)
     LOCAL_HTTP,   // address reported by whatismyip.com and similar
     LOCAL_MANUAL, // address explicitly specified (-externalip=)
 
@@ -98,29 +109,10 @@ public:
 };
 
 
-/** Thread types */
-enum threadId
-{
-    THREAD_SOCKETHANDLER,
-    THREAD_OPENCONNECTIONS,
-    THREAD_MESSAGEHANDLER,
-    THREAD_RPCLISTENER,
-    THREAD_UPNP,
-    THREAD_DNSSEED,
-    THREAD_ADDEDCONNECTIONS,
-    THREAD_DUMPADDRESS,
-    THREAD_RPCHANDLER,
-    THREAD_STAKE_MINER,
-
-    THREAD_MAX
-};
-
 extern bool fDiscover;
-extern bool fUseUPnP;
 extern uint64_t nLocalServices;
 extern uint64_t nLocalHostNonce;
 extern CAddress addrSeenByPeer;
-extern boost::array<int, THREAD_MAX> vnThreadsRunning;
 extern CAddrMan addrman;
 
 extern std::vector<CNode*> vNodes;
@@ -129,6 +121,9 @@ extern std::map<CInv, CDataStream> mapRelay;
 extern std::deque<std::pair<int64_t, CInv> > vRelayExpiration;
 extern CCriticalSection cs_mapRelay;
 extern std::map<CInv, int64_t> mapAlreadyAskedFor;
+
+extern std::vector<std::string> vAddedNodes;
+extern CCriticalSection cs_vAddedNodes;
 
 
 
@@ -351,14 +346,14 @@ public:
     }
 
 private:
-    CNode(const CNode&);
-    void operator=(const CNode&);
-    
     // Network usage totals
     static CCriticalSection cs_totalBytesRecv;
     static CCriticalSection cs_totalBytesSent;
     static uint64_t nTotalBytesRecv;
     static uint64_t nTotalBytesSent;
+
+    CNode(const CNode&);
+    void operator=(const CNode&);
 public:
 
 
@@ -725,8 +720,6 @@ public:
     void Subscribe(unsigned int nChannel, unsigned int nHops=0);
     void CancelSubscribe(unsigned int nChannel);
     void CloseSocketDisconnect();
-    void Cleanup();
-
 
     // Denial-of-service detection/prevention
     // The idea is to detect peers that are behaving
@@ -746,7 +739,6 @@ public:
     static bool IsBanned(CNetAddr ip);
     bool Misbehaving(int howmuch); // 1 == a little, 100 == a lot
     void copyStats(CNodeStats &stats);
-    
     // Network stats
     static void RecordBytesRecv(uint64_t bytes);
     static void RecordBytesSent(uint64_t bytes);

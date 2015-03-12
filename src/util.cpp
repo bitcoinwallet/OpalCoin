@@ -70,8 +70,6 @@ bool fDebugSmsg = false;
 bool fNoSmsg = false;
 bool fPrintToConsole = false;
 bool fPrintToDebugger = false;
-bool fRequestShutdown = false;
-bool fShutdown = false;
 bool fDaemon = false;
 bool fServer = false;
 bool fCommandLine = false;
@@ -81,6 +79,7 @@ bool fNoListen = false;
 bool fLogTimestamps = false;
 CMedianFilter<int64_t> vTimeOffsets(200,0);
 bool fReopenDebugLog = false;
+bool fCachedPath[2] = {false, false};
 
 // Init OpenSSL library multithreading support
 static CCriticalSection** ppmutexOpenSSL;
@@ -108,15 +107,16 @@ public:
         CRYPTO_set_locking_callback(locking_callback);
 
 #ifdef WIN32
-        // Seed random number generator with screen scrape and other hardware sources
+        // Seed OpenSSL PRNG with current contents of the screen
         RAND_screen();
 #endif
 
-        // Seed random number generator with performance counter
+        // Seed OpenSSL PRNG with performance counter
         RandAddSeed();
     }
     ~CInit()
     {
+        // Securely erase the memory used by the PRNG
         RAND_cleanup();
         // Shutdown OpenSSL library multithreading support
         CRYPTO_set_locking_callback(NULL);
@@ -163,7 +163,7 @@ void RandAddSeedPerfmon()
     if (ret == ERROR_SUCCESS)
     {
         RAND_add(pdata, nSize, nSize/100.0);
-        memset(pdata, 0, nSize);
+        OPENSSL_cleanse(pdata, nSize);
         printf("RandAddSeed() %lu bytes\n", nSize);
     }
 #endif
@@ -973,12 +973,6 @@ static std::string FormatException(std::exception* pex, const char* pszThread)
             "UNKNOWN EXCEPTION       \n%s in %s       \n", pszModule, pszThread);
 }
 
-void LogException(std::exception* pex, const char* pszThread)
-{
-    std::string message = FormatException(pex, pszThread);
-    printf("\n%s", message.c_str());
-}
-
 void PrintException(std::exception* pex, const char* pszThread)
 {
     std::string message = FormatException(pex, pszThread);
@@ -1044,13 +1038,12 @@ const boost::filesystem::path &GetDataDir(bool fNetSpecific)
 
     static fs::path pathCached[2];
     static CCriticalSection csPathCached;
-    static bool cachedPath[2] = {false, false};
 
     fs::path &path = pathCached[fNetSpecific];
 
     // This can be called during exceptions by printf, so we cache the
     // value so we don't have to do memory allocations after that.
-    if (cachedPath[fNetSpecific])
+    if (fCachedPath[fNetSpecific])
         return path;
 
     LOCK(csPathCached);
@@ -1069,7 +1062,7 @@ const boost::filesystem::path &GetDataDir(bool fNetSpecific)
 
     fs::create_directory(path);
 
-    cachedPath[fNetSpecific]=true;
+    fCachedPath[fNetSpecific] = true;
     return path;
 }
 
@@ -1086,6 +1079,9 @@ void ReadConfigFile(map<string, string>& mapSettingsRet,
     boost::filesystem::ifstream streamConfig(GetConfigFile());
     if (!streamConfig.good())
         return; // No bitcoin.conf file is OK
+
+    // clear path cache after loading config file
+    fCachedPath[0] = fCachedPath[1] = false;
 
     set<string> setOptions;
     setOptions.insert("*");
@@ -1252,12 +1248,26 @@ void AddTimeData(const CNetAddr& ip, int64_t nTime)
     }
 }
 
-
-
-
-
-
-
+uint32_t insecure_rand_Rz = 11;
+uint32_t insecure_rand_Rw = 11;
+void seed_insecure_rand(bool fDeterministic)
+{
+    //The seed values have some unlikely fixed points which we avoid.
+    if(fDeterministic)
+    {
+        insecure_rand_Rz = insecure_rand_Rw = 11;
+    } else {
+        uint32_t tmp;
+        do{
+            RAND_bytes((unsigned char*)&tmp,4);
+        }while(tmp==0 || tmp==0x9068ffffU);
+        insecure_rand_Rz=tmp;
+        do{
+            RAND_bytes((unsigned char*)&tmp,4);
+        }while(tmp==0 || tmp==0x464fffffU);
+        insecure_rand_Rw=tmp;
+    }
+}
 
 string FormatVersion(int nVersion)
 {
@@ -1319,9 +1329,12 @@ void RenameThread(const char* name)
     //       removed.
     pthread_set_name_np(pthread_self(), name);
 
-// This is XCode 10.6-and-later; bring back if we drop 10.5 support:
-// #elif defined(MAC_OSX)
-//    pthread_setname_np(name);
+#elif defined(MAC_OSX) && defined(__MAC_OS_X_VERSION_MAX_ALLOWED)
+
+// pthread_setname_np is XCode 10.6-and-later
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1060
+    pthread_setname_np(name);
+#endif
 
 #else
     // Prevent warnings for unused parameters...

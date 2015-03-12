@@ -17,6 +17,7 @@
 #include "keystore.h"
 #include "bignum.h"
 #include "stealth.h"
+#include "util.h"
 
 typedef std::vector<unsigned char> valtype;
 
@@ -529,7 +530,7 @@ public:
 
     bool IsPayToScriptHash() const;
 
-    // Called by CTransaction::IsStandard and P2SH VerifyScript (which makes it consensus-critical).
+    // Called by IsStandardTx and P2SH VerifyScript (which makes it consensus-critical).
     bool IsPushOnly() const
     {
         const_iterator pc = begin();
@@ -544,17 +545,11 @@ public:
         return true;
     }
 
-    // Called by CTransaction::IsStandard.
+    // Called by IsStandardTx.
     bool HasCanonicalPushes() const;
 
     void SetDestination(const CTxDestination& address);
     void SetMultisig(int nRequired, const std::vector<CKey>& keys);
-
-
-    void PrintHex() const
-    {
-        printf("CScript(%s)\n", HexStr(begin(), end(), true).c_str());
-    }
 
     std::string ToString(bool fShort=false) const
     {
@@ -577,11 +572,6 @@ public:
                 str += GetOpName(opcode);
         }
         return str;
-    }
-
-    void print() const
-    {
-        printf("%s\n", ToString().c_str());
     }
 
     CScriptID GetID() const

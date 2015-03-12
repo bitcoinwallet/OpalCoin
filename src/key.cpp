@@ -403,21 +403,20 @@ bool CKey::SetCompactSignature(uint256 hash, const std::vector<unsigned char>& v
 bool CKey::Verify(uint256 hash, const std::vector<unsigned char>& vchSig)
 {
     // -1 = error, 0 = bad sig, 1 = good
-    if (ECDSA_verify(0, (unsigned char*)&hash, sizeof(hash), &vchSig[0], vchSig.size(), pkey) != 1)
+    // New versions of OpenSSL will reject non-canonical DER signatures. de/re-serialize first.
+    unsigned char *norm_der = NULL;
+    ECDSA_SIG *norm_sig = ECDSA_SIG_new();
+    const unsigned char* sigptr = &vchSig[0];
+    d2i_ECDSA_SIG(&norm_sig, &sigptr, vchSig.size());
+    int derlen = i2d_ECDSA_SIG(norm_sig, &norm_der);
+    ECDSA_SIG_free(norm_sig);
+    if (derlen <= 0)
         return false;
 
-    return true;
-}
-
-bool CKey::VerifyCompact(uint256 hash, const std::vector<unsigned char>& vchSig)
-{
-    CKey key;
-    if (!key.SetCompactSignature(hash, vchSig))
-        return false;
-    if (GetPubKey() != key.GetPubKey())
-        return false;
-
-    return true;
+	// -1 = error, 0 = bad sig, 1 = good
+	bool ret = ECDSA_verify(0, (unsigned char*)&hash, sizeof(hash), norm_der, derlen, pkey) == 1;
+	OPENSSL_free(norm_der);
+	return ret;
 }
 
 bool CKey::IsValid()
@@ -433,4 +432,14 @@ bool CKey::IsValid()
     CKey key2;
     key2.SetSecret(secret, fCompr);
     return GetPubKey() == key2.GetPubKey();
+}
+
+bool ECC_InitSanityCheck() {
+    EC_KEY *pkey = EC_KEY_new_by_curve_name(NID_secp256k1);
+    if(pkey == NULL)
+        return false;
+    EC_KEY_free(pkey);
+
+    // TODO Is there more EC functionality that could be missing?
+    return true;
 }

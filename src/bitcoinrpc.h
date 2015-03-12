@@ -68,7 +68,8 @@ enum RPCErrorCode
 
 json_spirit::Object JSONRPCError(int code, const std::string& message);
 
-void ThreadRPCServer(void* parg);
+void StartRPCThreads();
+void StopRPCThreads();
 int CommandLineRPC(int argc, char *argv[]);
 
 /** Convert parameter values for RPC call from strings to command-specific JSON objects. */
@@ -87,6 +88,12 @@ void RPCTypeCheck(const json_spirit::Array& params,
 */
 void RPCTypeCheck(const json_spirit::Object& o,
                   const std::map<std::string, json_spirit::Value_type>& typesExpected, bool fAllowNull=false);
+
+/*
+  Run func nSeconds from now. Uses boost deadline timers.
+  Overrides previous timer <name> (if any).
+ */
+void RPCRunLater(const std::string& name, boost::function<void(void)> func, int64_t nSeconds);
 
 typedef json_spirit::Value(*rpcfn_type)(const json_spirit::Array& params, bool fHelp);
 
@@ -131,7 +138,6 @@ extern double GetDifficulty(const CBlockIndex* blockindex = NULL);
 extern double GetPoWMHashPS();
 extern double GetPoSKernelPS();
 
-extern std::string HexBits(unsigned int nBits);
 extern std::string HelpRequiringPassphrase();
 extern void EnsureWalletIsUnlocked();
 
@@ -147,6 +153,10 @@ extern std::vector<unsigned char> ParseHexO(const json_spirit::Object& o, std::s
 extern json_spirit::Value getconnectioncount(const json_spirit::Array& params, bool fHelp); // in rpcnet.cpp
 extern json_spirit::Value getpeerinfo(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value ping(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value addnode(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value getaddednodeinfo(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value getnettotals(const json_spirit::Array& params, bool fHelp);
+
 extern json_spirit::Value dumpwallet(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value importwallet(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value dumpprivkey(const json_spirit::Array& params, bool fHelp); // in rpcdump.cpp

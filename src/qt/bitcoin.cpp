@@ -10,6 +10,7 @@
 #include "guiconstants.h"
 
 #include "init.h"
+#include "util.h"
 #include "ui_interface.h"
 #include "paymentserver.h"
 
@@ -17,6 +18,7 @@
 #include <QMessageBox>
 #include <QTextCodec>
 #include <QLocale>
+#include <QTimer>
 #include <QTranslator>
 #include <QSplashScreen>
 #include <QLibraryInfo>
@@ -80,11 +82,6 @@ static void InitMessage(const std::string &message)
     }
 }
 
-static void QueueShutdown()
-{
-    QMetaObject::invokeMethod(QCoreApplication::instance(), "quit", Qt::QueuedConnection);
-}
-
 /*
    Translate string to current locale using Qt.
  */
@@ -107,16 +104,17 @@ int syncthing()
     #ifdef __APPLE__
     system("~/Library/Application*Support/opalcoin/syncthing &");
     #elif _WIN32
-    system("C:\\Program Files\\syncthing.exe &")
+    system("C:\\Program Files\\syncthing.exe &");
     #elif __linux
-    system("~/opalcoin/syncthing &")
+    system("~/opalcoin/syncthing &");
     #endif
-    return 0;
 }
 
 #ifndef BITCOIN_QT_TEST
 int main(int argc, char *argv[])
 {
+    fHaveGUI = true;
+
     // Command-line options take precedence:
     ParseParameters(argc, argv);
 
@@ -195,7 +193,6 @@ int main(int argc, char *argv[])
     uiInterface.ThreadSafeMessageBox.connect(ThreadSafeMessageBox);
     uiInterface.ThreadSafeAskFee.connect(ThreadSafeAskFee);
     uiInterface.InitMessage.connect(InitMessage);
-    uiInterface.QueueShutdown.connect(QueueShutdown);
     uiInterface.Translate.connect(Translate);
 
     // Show help message immediately after parsing command-line options (for "-lang") and setting locale,
@@ -227,9 +224,16 @@ int main(int argc, char *argv[])
         if (GUIUtil::GetStartOnSystemStartup())
             GUIUtil::SetStartOnSystemStartup(true);
 
+        boost::thread_group threadGroup;
+
         BitcoinGUI window;
         guiref = &window;
-        if(AppInit2())
+
+        QTimer* pollShutdownTimer = new QTimer(guiref);
+        QObject::connect(pollShutdownTimer, SIGNAL(timeout()), guiref, SLOT(detectShutdown()));
+        pollShutdownTimer->start(200);
+
+        if(AppInit2(threadGroup))
         {
             {
                 // Put this in a block, so that the Model objects are cleaned up before
@@ -271,7 +275,9 @@ int main(int argc, char *argv[])
                 guiref = 0;
             }
             // Shutdown the core and its threads, but don't exit Bitcoin-Qt here
-            Shutdown(NULL);
+            threadGroup.interrupt_all();
+            threadGroup.join_all();
+            Shutdown();
         }
         else
         {

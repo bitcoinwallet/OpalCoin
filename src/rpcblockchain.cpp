@@ -99,17 +99,19 @@ Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool fPri
 {
     Object result;
     result.push_back(Pair("hash", block.GetHash().GetHex()));
-    CMerkleTx txGen(block.vtx[0]);
-    txGen.SetMerkleBranch(&block);
-    result.push_back(Pair("confirmations", (int)txGen.GetDepthInMainChain()));
+    int confirmations = -1;
+    // Only report confirmations if the block is on the main chain
+    if (blockindex->IsInMainChain())
+        confirmations = nBestHeight - blockindex->nHeight + 1;
+    result.push_back(Pair("confirmations", confirmations));
     result.push_back(Pair("size", (int)::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION)));
     result.push_back(Pair("height", blockindex->nHeight));
     result.push_back(Pair("version", block.nVersion));
     result.push_back(Pair("merkleroot", block.hashMerkleRoot.GetHex()));
     result.push_back(Pair("mint", ValueFromAmount(blockindex->nMint)));
-    result.push_back(Pair("time", (boost::int64_t)block.GetBlockTime()));
-    result.push_back(Pair("nonce", (boost::uint64_t)block.nNonce));
-    result.push_back(Pair("bits", HexBits(block.nBits)));
+    result.push_back(Pair("time", (int64_t)block.GetBlockTime()));
+    result.push_back(Pair("nonce", (uint64_t)block.nNonce));
+    result.push_back(Pair("bits", strprintf("%08x", block.nBits)));
     result.push_back(Pair("difficulty", GetDifficulty(blockindex)));
     result.push_back(Pair("blocktrust", leftTrim(blockindex->GetBlockTrust().GetHex(), '0')));
     result.push_back(Pair("chaintrust", leftTrim(blockindex->nChainTrust.GetHex(), '0')));

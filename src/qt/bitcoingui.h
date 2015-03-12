@@ -136,6 +136,8 @@ private:
     RPCConsole *rpcConsole;
 
     QMovie *syncIconMovie;
+    /** Keep track of previous number of blocks, to detect progress */
+    int prevBlocks;
 
     /** Create the main UI actions. */
     void createActions();
@@ -150,7 +152,7 @@ public slots:
     /** Set number of connections shown in the UI */
     void setNumConnections(int count);
     /** Set number of blocks shown in the UI */
-    void setNumBlocks(int count, int nTotalBlocks);
+    void setNumBlocks(int count);
     /** Set the encryption status as shown in the UI.
        @param[in] status            current encryption status
        @see WalletModel::EncryptionStatus
@@ -231,6 +233,9 @@ private slots:
     void toggleHidden();
 
     void updateStakingIcon();
+
+    /** called by a timer to check if fRequestShutdown has been set **/
+    void detectShutdown();
 };
 
 #endif

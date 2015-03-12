@@ -27,9 +27,13 @@ class CRequestTracker;
 class CNode;
 
 static const int LAST_POW_BLOCK = 15000; // Approx 10 days of PoW
+class CTxMemPool;
 
 static const unsigned int MAX_BLOCK_SIZE = 1000000;
 static const unsigned int MAX_BLOCK_SIZE_GEN = MAX_BLOCK_SIZE/2;
+/** The maximum size for transactions we're willing to relay/mine **/
+static const unsigned int MAX_STANDARD_TX_SIZE = MAX_BLOCK_SIZE_GEN/5;
+/** The maximum allowed number of signature check operations in a block (network rule) */
 static const unsigned int MAX_BLOCK_SIGOPS = MAX_BLOCK_SIZE/50;
 static const unsigned int MAX_ORPHAN_TRANSACTIONS = MAX_BLOCK_SIZE/100;
 static const unsigned int MAX_INV_SZ = 50000;
@@ -43,12 +47,6 @@ static const int MODIFIER_INTERVAL_SWITCH = 15000;
 inline bool MoneyRange(int64_t nValue) { return (nValue >= 0 && nValue <= MAX_MONEY); }
 // Threshold for nLockTime: below this value it is interpreted as block number, otherwise as UNIX timestamp.
 static const unsigned int LOCKTIME_THRESHOLD = 500000000; // Tue Nov  5 00:53:20 1985 UTC
-
-#ifdef USE_UPNP
-static const int fHaveUPnP = true;
-#else
-static const int fHaveUPnP = false;
-#endif
 
 static const uint256 hashGenesisBlock("0x0000090c4b0df6dc6253a2172216efd111119ddefba3badaf901bf9153762e16");
 static const uint256 hashGenesisBlockTestNet("0x");
@@ -77,10 +75,9 @@ extern uint64_t nLastBlockSize;
 extern int64_t nLastCoinStakeSearchInterval;
 extern const std::string strMessageMagic;
 extern int64_t nTimeBestReceived;
-extern CCriticalSection cs_setpwalletRegistered;
-extern std::set<CWallet*> setpwalletRegistered;
 extern unsigned char pchMessageStart[4];
 extern std::map<uint256, CBlock*> mapOrphanBlocks;
+extern bool fHaveGUI;
 
 // Settings
 extern int64_t nTransactionFee;
@@ -89,19 +86,30 @@ extern int64_t nMinimumInputValue;
 extern bool fUseFastIndex;
 extern unsigned int nDerivationMethodIndex;
 
-extern bool fEnforceCanonical;
-
 // Minimum disk space required - used in CheckDiskSpace()
 static const uint64_t nMinDiskSpace = 52428800;
 
 class CReserveKey;
 class CTxDB;
 class CTxIndex;
+class CWalletInterface;
 
+/** Register a wallet to receive updates from core */
+void RegisterWallet(CWalletInterface* pwalletIn);
+/** Unregister a wallet from core */
+void UnregisterWallet(CWalletInterface* pwalletIn);
+/** Unregister all wallets from core */
+void UnregisterAllWallets();
+/** Push an updated transaction to all registered wallets */
+void SyncWithWallets(const CTransaction& tx, const CBlock* pblock = NULL, bool fConnect = true);
+/** Ask wallets to resend their transactions */
+void ResendWalletTransactions(bool fForce = false);
 
-void RegisterWallet(CWallet* pwalletIn);
-void UnregisterWallet(CWallet* pwalletIn);
-void SyncWithWallets(const CTransaction& tx, const CBlock* pblock = NULL, bool fUpdate = false, bool fConnect = true);
+/** Register with a network node to receive its signals */
+void RegisterNodeSignals(CNodeSignals& nodeSignals);
+/** Unregister a network node */
+void UnregisterNodeSignals(CNodeSignals& nodeSignals);
+
 bool ProcessBlock(CNode* pfrom, CBlock* pblock);
 bool CheckDiskSpace(uint64_t nAdditionalBytes=0);
 FILE* OpenBlockFile(unsigned int nFile, unsigned int nBlockPos, const char* pszMode="rb");
@@ -119,18 +127,18 @@ int64_t GetProofOfWorkReward(int nHeight, int64_t nFees);
 int64_t GetProofOfStakeReward(int64_t nCoinAge, int64_t nFees);
 unsigned int ComputeMinWork(unsigned int nBase, int64_t nTime);
 unsigned int ComputeMinStake(unsigned int nBase, int64_t nTime, unsigned int nBlockTime);
-int GetNumBlocksOfPeers();
 bool IsInitialBlockDownload();
 std::string GetWarnings(std::string strFor);
 bool GetTransaction(const uint256 &hash, CTransaction &tx, uint256 &hashBlock);
 uint256 WantedByOrphan(const CBlock* pblockOrphan);
 const CBlockIndex* GetLastBlockIndex(const CBlockIndex* pindex, bool fProofOfStake);
-void StakeMiner(CWallet *pwallet);
-void ResendWalletTransactions(bool fForce = false);
+void ThreadStakeMiner(CWallet *pwallet);
 
 
+/** (try to) add transaction to memory pool **/
+bool AcceptToMemoryPool(CTxMemPool& pool, CTransaction &tx, bool fLimitFree,
+                        bool* pfMissingInputs);
 
-bool GetWalletFile(CWallet* pwallet, std::string &strWalletFileOut);
 
 /** Position on disk for a particular transaction. */
 class CDiskTxPos
@@ -397,8 +405,6 @@ public:
     std::string ToString() const
     {
         if (IsEmpty()) return "CTxOut(empty)";
-        if (scriptPubKey.size() < 6)
-            return "CTxOut(error)";
         return strprintf("CTxOut(nValue=%s, scriptPubKey=%s)", FormatMoney(nValue).c_str(), scriptPubKey.ToString().c_str());
     }
 
@@ -472,52 +478,6 @@ public:
         return SerializeHash(*this);
     }
 
-    bool IsFinal(int nBlockHeight=0, int64_t nBlockTime=0) const
-    {
-        // Time based nLockTime implemented in 0.1.6
-        if (nLockTime == 0)
-            return true;
-        if (nBlockHeight == 0)
-            nBlockHeight = nBestHeight;
-        if (nBlockTime == 0)
-            nBlockTime = GetAdjustedTime();
-        if ((int64_t)nLockTime < ((int64_t)nLockTime < LOCKTIME_THRESHOLD ? (int64_t)nBlockHeight : nBlockTime))
-            return true;
-        BOOST_FOREACH(const CTxIn& txin, vin)
-            if (!txin.IsFinal())
-                return false;
-        return true;
-    }
-
-    bool IsNewerThan(const CTransaction& old) const
-    {
-        if (vin.size() != old.vin.size())
-            return false;
-        for (unsigned int i = 0; i < vin.size(); i++)
-            if (vin[i].prevout != old.vin[i].prevout)
-                return false;
-
-        bool fNewer = false;
-        unsigned int nLowest = std::numeric_limits<unsigned int>::max();
-        for (unsigned int i = 0; i < vin.size(); i++)
-        {
-            if (vin[i].nSequence != old.vin[i].nSequence)
-            {
-                if (vin[i].nSequence <= nLowest)
-                {
-                    fNewer = false;
-                    nLowest = vin[i].nSequence;
-                }
-                if (old.vin[i].nSequence < nLowest)
-                {
-                    fNewer = true;
-                    nLowest = old.vin[i].nSequence;
-                }
-            }
-        }
-        return fNewer;
-    }
-
     bool IsCoinBase() const
     {
         return (vin.size() == 1 && vin[0].prevout.IsNull() && vout.size() >= 1);
@@ -528,11 +488,6 @@ public:
         // ppcoin: the coin stake transaction is marked with the first output empty
         return (vin.size() > 0 && (!vin[0].prevout.IsNull()) && vout.size() >= 2 && vout[0].IsEmpty());
     }
-
-    /** Check for standard transaction types
-        @return True if all outputs (scriptPubKeys) use only standard transaction forms
-    */
-    bool IsStandard() const;
 
     /** Check for standard transaction types
         @param[in] mapInputs	Map of previous transactions that have outputs we're spending
@@ -687,14 +642,18 @@ public:
                        std::map<uint256, CTxIndex>& mapTestPool, const CDiskTxPos& posThisTx,
                        const CBlockIndex* pindexBlock, bool fBlock, bool fMiner);
     bool CheckTransaction() const;
-    bool AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs=true, bool* pfMissingInputs=NULL);
     bool GetCoinAge(CTxDB& txdb, uint64_t& nCoinAge) const;  // ppcoin: get transaction coin age
 
 protected:
     const CTxOut& GetOutputFor(const CTxIn& input, const MapPrevTx& inputs) const;
 };
 
+/** Check for standard transaction types
+    @return True if all outputs (scriptPubKeys) use only standard transaction forms
+*/
+bool IsStandardTx(const CTransaction& tx);
 
+bool IsFinalTx(const CTransaction &tx, int nBlockHeight = 0, int64_t nBlockTime = 0);
 
 
 
@@ -750,8 +709,7 @@ public:
     int GetDepthInMainChain() const { CBlockIndex *pindexRet; return GetDepthInMainChain(pindexRet); }
     bool IsInMainChain() const { CBlockIndex *pindexRet; return GetDepthInMainChainINTERNAL(pindexRet) > 0; }
     int GetBlocksToMaturity() const;
-    bool AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs=true);
-    bool AcceptToMemoryPool();
+    bool AcceptToMemoryPool(bool fLimitFree=true);
 };
 
 
@@ -1250,18 +1208,6 @@ public:
         return pbegin[(pend - pbegin)/2];
     }
 
-    int64_t GetMedianTime() const
-    {
-        const CBlockIndex* pindex = this;
-        for (int i = 0; i < nMedianTimeSpan/2; i++)
-        {
-            if (!pindex->pnext)
-                return GetBlockTime();
-            pindex = pindex->pnext;
-        }
-        return pindex->GetMedianTimePast();
-    }
-
     /**
      * Returns true if there are nRequired or more blocks of minVersion or above
      * in the last nToCheck blocks, starting at pstart and going backwards.
@@ -1573,8 +1519,6 @@ public:
     std::map<uint256, CTransaction> mapTx;
     std::map<COutPoint, CInPoint> mapNextTx;
 
-    bool accept(CTxDB& txdb, CTransaction &tx,
-                bool fCheckInputs, bool* pfMissingInputs);
     bool addUnchecked(const uint256& hash, CTransaction &tx);
     bool remove(const CTransaction &tx, bool fRecursive = false);
     bool removeConflicts(const CTransaction &tx);
@@ -1599,5 +1543,19 @@ public:
 };
 
 extern CTxMemPool mempool;
+
+
+class CWalletInterface {
+protected:
+    virtual void SyncTransaction(const CTransaction &tx, const CBlock *pblock, bool fConnect) =0;
+    virtual void EraseFromWallet(const uint256 &hash) =0;
+    virtual void SetBestChain(const CBlockLocator &locator) =0;
+    virtual void UpdatedTransaction(const uint256 &hash) =0;
+    virtual void Inventory(const uint256 &hash) =0;
+    virtual void ResendWalletTransactions(bool fForce) =0;
+    friend void ::RegisterWallet(CWalletInterface*);
+    friend void ::UnregisterWallet(CWalletInterface*);
+    friend void ::UnregisterAllWallets();
+};
 
 #endif

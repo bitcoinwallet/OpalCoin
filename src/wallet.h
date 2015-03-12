@@ -5,6 +5,8 @@
 #ifndef BITCOIN_WALLET_H
 #define BITCOIN_WALLET_H
 
+#include "walletdb.h"
+
 #include <string>
 #include <vector>
 
@@ -24,10 +26,11 @@
 extern bool fWalletUnlockStakingOnly;
 extern bool fConfChange;
 class CAccountingEntry;
+class CCoinControl;
 class CWalletTx;
 class CReserveKey;
 class COutput;
-class CCoinControl;
+class CWalletDB;
 
 typedef std::map<CKeyID, CStealthKeyMetadata> StealthKeyMetaMap;
 typedef std::map<std::string, std::string> mapValue_t;
@@ -73,7 +76,7 @@ public:
 /** A CWallet is an extension of a keystore, which also maintains a set of transactions and balances,
  * and provides the ability to create new transactions.
  */
-class CWallet : public CCryptoKeyStore
+class CWallet : public CCryptoKeyStore, public CWalletInterface
 {
 private:
     bool SelectCoinsForStaking(int64_t nTargetValue, unsigned int nSpendTime, std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet, int64_t& nValueRet) const;
@@ -191,8 +194,9 @@ public:
 
     void MarkDirty();
     bool AddToWallet(const CWalletTx& wtxIn);
-    bool AddToWalletIfInvolvingMe(const CTransaction& tx, const CBlock* pblock, bool fUpdate = false, bool fFindBlock = false);
-    bool EraseFromWallet(uint256 hash);
+    void SyncTransaction(const CTransaction& tx, const CBlock* pblock, bool fConnect = true);
+    bool AddToWalletIfInvolvingMe(const CTransaction& tx, const CBlock* pblock, bool fUpdate);
+    void EraseFromWallet(const uint256 &hash);
     void WalletUpdateSpent(const CTransaction& prevout, bool fBlock = false);
     int ScanForWalletTransactions(CBlockIndex* pindexStart, bool fUpdate = false);
     void ReacceptWalletTransactions();
@@ -313,8 +317,6 @@ public:
 
     void UpdatedTransaction(const uint256 &hashTx);
 
-    void PrintWallet(const CBlock& block);
-
     void Inventory(const uint256 &hash)
     {
         {
@@ -330,8 +332,6 @@ public:
         AssertLockHeld(cs_wallet); // setKeyPool
         return setKeyPool.size();
     }
-
-    bool GetTransaction(const uint256 &hashTx, CWalletTx& wtx);
 
     bool SetDefaultKey(const CPubKey &vchPubKey);
 
@@ -375,8 +375,7 @@ public:
 
     ~CReserveKey()
     {
-        if (!fShutdown)
-            ReturnKey();
+        ReturnKey();
     }
 
     void ReturnKey();
@@ -677,7 +676,7 @@ public:
     bool IsTrusted() const
     {
         // Quick answer in most cases
-        if (!IsFinal())
+        if (!IsFinalTx(*this))
             return false;
         int nDepth = GetDepthInMainChain();
         if (nDepth >= 1)
@@ -697,7 +696,7 @@ public:
         {
             const CMerkleTx* ptx = vWorkQueue[i];
 
-            if (!ptx->IsFinal())
+            if (!IsFinalTx(*ptx))
                 return false;
             int nPDepth = ptx->GetDepthInMainChain();
             if (nPDepth >= 1)
@@ -905,7 +904,5 @@ public:
 private:
     std::vector<char> _ssExtra;
 };
-
-bool GetWalletFile(CWallet* pwallet, std::string &strWalletFileOut);
 
 #endif
