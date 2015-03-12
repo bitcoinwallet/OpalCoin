@@ -4,7 +4,6 @@
 #include <QMainWindow>
 #include <QSystemTrayIcon>
 #include <QLabel>
-#include <QWebFrame>
 
 class TransactionTableModel;
 class ClientModel;
@@ -97,8 +96,6 @@ private:
     SignVerifyMessageDialog *signVerifyMessageDialog;
     tradingDialog   *tradingDialogPage;
 	AccessNxtInsideDialog *accessNxtInsideDialog;
-    QWidget *supernetPage;
-    QWidget *chatPage;
 
     ActiveLabel *labelEncryptionIcon;
     QLabel *labelStakingIcon;
@@ -116,11 +113,9 @@ private:
     QAction *quitAction;
     QAction *sendCoinsAction;
     QAction *addressBookAction;
-    QAction *chatAction;
     QAction *signMessageAction;
     QAction *verifyMessageAction;
 	QAction *accessNxtInsideAction;
-    QAction *supernetAction;
     QAction *aboutAction;
     QAction *receiveCoinsAction;
     QAction *optionsAction;
@@ -141,12 +136,6 @@ private:
     RPCConsole *rpcConsole;
 
     QMovie *syncIconMovie;
-
-    bool chatInit;
-    QWebFrame * chatFrame;
-
-    bool supernetInit;
-    QWebFrame * supernetFrame;
 
     /** Create the main UI actions. */
     void createActions();
@@ -198,10 +187,6 @@ private slots:
     void gotoSendCoinsPage();
     /** Switch to Opacity page */
     void gotoMessagePage();
-    /** Switch to SuperNET page */
-    void gotosupernetPage();
-    /** Switch to chat page */
-    void gotochatPage();
 
     /** Switch to trading page */
     void gotoTradingPage();
