@@ -9,7 +9,7 @@ CONFIG += thread
 CONFIG += openssl-linked
 CONFIG += openssl
 CONFIG += static
-QT += core gui network widgets webkit webkitwidgets
+QT += core gui network widgets
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 lessThan(QT_MAJOR_VERSION, 5): CONFIG += static
 QMAKE_CXXFLAGS = -fpermissive
@@ -424,8 +424,6 @@ FORMS += \
     src/qt/forms/aboutdialog.ui \
     src/qt/forms/editaddressdialog.ui \
     src/qt/forms/transactiondescdialog.ui \
-    src/qt/forms/supernetpage.ui \
-    src/qt/forms/chatpage.ui \
     src/qt/forms/overviewpage.ui \
     src/qt/forms/sendcoinsentry.ui \
     src/qt/forms/askpassphrasedialog.ui \
